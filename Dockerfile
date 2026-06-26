@@ -1,5 +1,4 @@
 # syntax = docker/dockerfile:1.4.0
-
 FROM debian:trixie-slim AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PG_VERSION=${PG_VERSION:-18.4}
@@ -72,11 +71,11 @@ RUN cd postgresql-${PG_VERSION}/ && meson setup build --buildtype=release --pref
 RUN rm -rf postgresql-${PG_VERSION}
 
 RUN curl -L https://github.com/timescale/timescaledb/archive/refs/tags/${TSDB}.tar.gz | tar -xzv
-RUN cd timescaledb-${TSDB}/ && ./bootstrap -DCMAKE_BUILD_TYPE="Release" -DUSE_OPENSSL=0 -DAPACHE_ONLY=ON -DSEND_TELEMETRY_DEFAULT=OFF -DUSE_TELEMETRY=OFF && cd build && make && make install -j
+RUN cd timescaledb-${TSDB}/ && ./bootstrap -DCMAKE_BUILD_TYPE="Release" -DUSE_OPENSSL=0 -DSEND_TELEMETRY_DEFAULT=OFF -DUSE_TELEMETRY=OFF && cd build && make && make install -j
 RUN rm -rf timescaledb-${TSDB}
 
 RUN curl -L https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz | tar -xzv
-RUN cd postgis-${GIDB}/ && ./configure --prefix=/app --enable-lto --enable-static --disable-shared  && make -j && make install
+RUN cd postgis-${GIDB}/ && ./configure --prefix=/app --enable-static --disable-shared  && make -j && make install
 RUN rm -rf postgis-${GIDB}
 
 # -------- runtime --------

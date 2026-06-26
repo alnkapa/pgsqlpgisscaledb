@@ -75,6 +75,7 @@ maintenance_work_mem = ${PG_MAINTENANCE_WORK_MEM}MB
 listen_addresses = '*'
 port = 5432
 ssl = off
+shared_preload_libraries = 'timescaledb'
 EOF
 
 }
