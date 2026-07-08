@@ -1,0 +1,1 @@
+docker run --rm -i -p 10.10.10.1:5432:5432 -v ./data:/var/lib/postgresql  --name my my
