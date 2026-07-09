@@ -7,7 +7,9 @@ ARG GIDB=${GIDB:-3.6.4}
 ARG GEOS=${GEOS:-3.14.1}
 ARG PROJ=${PROJ:-9.8.1}
 ARG JSON=${JSON:-3.12.0}
-ENV CURL_VERSION=${CURL_VERSION:-8.21.0}
+ARG CURL_VERSION=${CURL_VERSION:-8.21.0}
+ARG OPENSSL_VERSION=${OPENSSL_VERSION:-4.0.1}
+
 RUN set -ex; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
@@ -26,20 +28,19 @@ RUN set -ex; \
 		bzip2 \
 		gzip \
 		pkg-config \
-		libreadline-dev \
-		zlib1g-dev \
-		libicu-dev \
-		liblz4-dev \
-		libzstd-dev \
-		libtiff-dev \
-		gettext \
 		ninja-build \
-		tcl-dev \
-		libxml2-dev \		
 	; \
 	rm -rf /var/lib/apt/lists/*
 
-
+		# libreadline-dev \
+		# gettext \
+		# zlib1g-dev \
+		# libicu-dev \
+		# liblz4-dev \
+		# libzstd-dev \
+		# libtiff-dev \
+		# tcl-dev \
+		# libxml2-dev \		
 		# libproj-dev \
 		# libgdal-dev \
 		# libsfcgal-dev \
@@ -54,11 +55,13 @@ RUN set -ex; \
 		# dblatex \
 
 WORKDIR /app
-
-ARG LD_LIBRARY_PATH=/app/lib
 ARG PATH=/app/bin:$PATH
 ARG MANPATH=/app/share/man:$MANPATH
+ARG LD_LIBRARY_PATH
 
+RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
+    echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
+    ldconfig
 # \ -Dssl=enabled \
 #   -Dnls=disabled \
 #   -Dicu=disabled \
@@ -74,31 +77,30 @@ ARG MANPATH=/app/share/man:$MANPATH
 #   -Dpltcl=disabled
 
 
-# Скачивание, сборка и установка OpenSSL
-ENV OPENSSL_VERSION=4.0.1
+# # Скачивание, сборка и установка OpenSSL no-shared \
+
 
 RUN wget https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz && \
     tar -xzvf openssl-${OPENSSL_VERSION}.tar.gz && \
     cd openssl-${OPENSSL_VERSION} && \
     ./Configure --prefix=/app \
-                --openssldir=/app/ssl \
-                no-shared \
+                --openssldir=/appl \
                 no-tests \
-                linux-x86_64 && \
+                '-Wl,--enable-new-dtags,-rpath,$(LIBRPATH)' && \
     make -j $(nproc) && \
     make install_sw && \
     cd .. && \
-    rm -rf openssl-${OPENSSL_VERSION} openssl-${OPENSSL_VERSION}.tar.gz
+    rm -rf openssl-${OPENSSL_VERSION} openssl-${OPENSSL_VERSION}.tar.gz	
 
-# Скачиваем и собираем CURL с помощью wget
+ENV LD_LIBRARY_PATH=/app/lib64:/app/lib:${LD_LIBRARY_PATH}
+
+
+# # Скачиваем и собираем CURL с помощью wget --disable-shared \
 RUN wget https://curl.se/download/curl-${CURL_VERSION}.tar.gz && \
     tar -xzvf curl-${CURL_VERSION}.tar.gz && \
     cd curl-${CURL_VERSION} && \
-    ./configure --prefix=/app \
-                --disable-shared \
-				--with-openssl \
-				--with-openssl-include=/app/include \
-                --with-openssl-lib=/app/lib \
+    ./configure --prefix=/app \                
+				--with-openssl=/app \
                 --enable-static \
                 --without-libpsl \
                 --without-brotli \
@@ -107,7 +109,6 @@ RUN wget https://curl.se/download/curl-${CURL_VERSION}.tar.gz && \
     make install && \
     cd .. && \
     rm -rf curl-${CURL_VERSION} curl-${CURL_VERSION}.tar.gz
-
 
 
 RUN curl -L https://github.com/nlohmann/json/archive/refs/tags/v${JSON}.tar.gz | tar -xzv
@@ -122,29 +123,34 @@ RUN cd sqlite-autoconf-3530300 && \
     make install
 RUN rm -rf sqlite-autoconf-3530300
 
-RUN curl -L https://ftp.postgresql.org/pub/source/v${PG_VERSION}/postgresql-${PG_VERSION}.tar.gz | tar -xzv
-RUN cd postgresql-${PG_VERSION}/ && meson setup build --buildtype=release --prefix=/app --default-library=static --default-both-libraries=static --prefer-static --auto-features=disabled  && cd build && ninja -j8 && ninja install
-RUN rm -rf postgresql-${PG_VERSION}
-
-# RUN curl -L https://github.com/timescale/timescaledb/archive/refs/tags/${TSDB}.tar.gz | tar -xzv
-# RUN cd timescaledb-${TSDB}/ && ./bootstrap -DCMAKE_BUILD_TYPE="Release" -DUSE_OPENSSL=0 -DSEND_TELEMETRY_DEFAULT=OFF -DUSE_TELEMETRY=OFF && cd build && make && make install -j 8
-# RUN rm -rf timescaledb-${TSDB}
-
 RUN curl -L https://github.com/libgeos/geos/releases/download/${GEOS}/geos-${GEOS}.tar.bz2 | tar -xjv
 RUN cd geos-${GEOS}/ && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install
 RUN rm -rf geos-${GEOS}
 
+RUN set -ex; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+		libtiff-dev \		
+	; \
+	rm -rf /var/lib/apt/lists/*
 
 RUN curl -L https://download.osgeo.org/proj/proj-${PROJ}.tar.gz | tar -xzv
-RUN cd proj-${PROJ}/ && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install
+RUN cd proj-${PROJ}/ && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/app -DENABLE_TIFF=OFF -DENABLE_CURL=ON -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install
 RUN rm -rf proj-${PROJ}
-RUN projsync --system-directory --all
+# RUN projsync --system-directory --all
 
-# find / -name "geos"
 
-RUN curl -L https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz | tar -xzv
-RUN cd postgis-${GIDB}/ && ./configure --prefix=/app --enable-static  --with-geosconfig=/app/bin/geos-config --with-geosconfig=/app/bin/geos-config && make -j8 && make install
-RUN rm -rf postgis-${GIDB}
+
+
+
+
+# # find / -name "geos"
+
+# RUN curl -L https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz | tar -xzv
+# RUN cd postgis-${GIDB}/ && ./configure --prefix=/app --enable-static  --with-geosconfig=/app/bin/geos-config --with-geosconfig=/app/bin/geos-config && make -j8 && make install
+# RUN rm -rf postgis-${GIDB}
+
+
 
 # -------- runtime --------
 FROM debian:trixie-slim AS runtime
