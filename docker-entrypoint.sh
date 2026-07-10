@@ -16,7 +16,7 @@ create_web_user() {
         local RETRY_COUNT=0
         local RETRY_MAX=10
         local RETRY_INTERVAL=3
-        while ! /app/bin/pg_isready 2> dev/null; do
+        while ! /app/bin/pg_isready 2> /dev/null; do
             RETRY_COUNT=$(( RETRY_COUNT + 1 ))
             if [ $RETRY_COUNT -ge $RETRY_MAX ]; then
                 echo "PostgreSQL not ready after $RETRY_MAX attempts. Exiting."
