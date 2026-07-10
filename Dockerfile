@@ -252,9 +252,6 @@ RUN   \
     make install && \
    cd / && rm -rf /tmp/sources/postgis-${GIDB}*
 
-# Аргументы для управления версией (добавьте в секцию ARG в начале файла)
-ARG TIMESCALEDB_VERSION=2.28.2
-
 # ==================== TIMESCALEDB ====================
 RUN \
     cd /tmp/sources && \    
