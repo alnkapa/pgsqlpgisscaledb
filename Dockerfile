@@ -12,6 +12,7 @@ ARG OPENSSL_VERSION=${OPENSSL_VERSION:-4.0.1}
 ARG PROTO_BUF=${PROTO_BUF:-30.2}
 ARG PROTO_C=${PROTO_C:-1.5.2}
 ARG LIBXML2_VERSION=${LIBXML2_VERSION:-2.15.3}
+ARG TIMESCALEDB_VERSION=2.28.2
 
 # Пути
 ENV PATH="/app/bin:${PATH}"
@@ -70,6 +71,7 @@ RUN   \
     wget -r --tries=10 https://github.com/protocolbuffers/protobuf/archive/refs/tags/v${PROTO_BUF}.tar.gz -O protobuf-${PROTO_BUF}.tar.gz && \
     wget -r --tries=10 https://github.com/protobuf-c/protobuf-c/archive/refs/tags/v${PROTO_C}.tar.gz -O protobuf-c-${PROTO_C}.tar.gz && \
     wget -r --tries=10 https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz -O postgis-${GIDB}.tar.gz && \
+    wget -r --tries=10 https://github.com/timescale/timescaledb/archive/refs/tags/${TIMESCALEDB_VERSION}.tar.gz -O timescaledb-${TIMESCALEDB_VERSION}.tar.gz && \
     echo "All sources downloaded"
 
 # ==================== OPENSSL ====================
@@ -249,6 +251,27 @@ RUN   \
     make -j$(nproc) && \
     make install && \
    cd / && rm -rf /tmp/sources/postgis-${GIDB}*
+
+# Аргументы для управления версией (добавьте в секцию ARG в начале файла)
+ARG TIMESCALEDB_VERSION=2.28.2
+
+# ==================== TIMESCALEDB ====================
+RUN \
+    cd /tmp/sources && \    
+    cd timescaledb-${TIMESCALEDB_VERSION} && \
+    ./bootstrap -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/app \
+                --install-prefix=/app \
+                -DREGRESS_CHECKS=OFF \
+                -DTAP_CHECKS=OFF \
+                -DWARNINGS_AS_ERRORS=OFF \
+                -DPROJECT_INSTALL_METHOD="docker" \
+                -DSEND_TELEMETRY_DEFAULT=OFF && \
+    cd build && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/timescaledb-${TIMESCALEDB_VERSION}
 
 # ==================== RUNTIME ====================
 FROM debian:trixie-slim AS runtime
