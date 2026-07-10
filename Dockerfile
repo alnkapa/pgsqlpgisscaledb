@@ -11,6 +11,7 @@ ARG CURL_VERSION=${CURL_VERSION:-8.21.0}
 ARG OPENSSL_VERSION=${OPENSSL_VERSION:-4.0.1}
 ARG PROTO_BUF=${PROTO_BUF:-30.2}
 ARG PROTO_C=${PROTO_C:-1.5.2}
+ARG LIBXML2_VERSION=${LIBXML2_VERSION:-2.15.3}
 
 # Пути
 ENV PATH="/app/bin:${PATH}"
@@ -23,7 +24,7 @@ RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
     echo "/app/lib/x86_64-linux-gnu" >> /etc/ld.so.conf.d/app.conf && \
     ldconfig
 
-# Базовые зависимости //		cmake \
+# Базовые зависимости //		cmake \ 		libxml2-dev \
 RUN  \
 	set -ex; \
 	apt-get update; \
@@ -46,7 +47,6 @@ RUN  \
 		autoconf \
 		automake \
 		libtool \
-		libxml2-dev \
 		libtiff-dev \
 	; \
 	rm -rf /var/lib/apt/lists/*
@@ -56,6 +56,7 @@ RUN  \
 RUN   \    
     set -ex; \
     mkdir -p /tmp/sources && cd /tmp/sources && \
+    wget -r --tries=10 https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-${LIBXML2_VERSION}.tar.xz -O libxml2-${LIBXML2_VERSION}.tar.xz  && \
     wget -r --tries=10 https://github.com/Kitware/CMake/archive/refs/tags/v4.3.3.tar.gz -O CMake-4.3.3.tar.gz && \
     wget -r --tries=10 https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz -O openssl-${OPENSSL_VERSION}.tar.gz && \
     wget -r --tries=10 https://curl.se/download/curl-${CURL_VERSION}.tar.gz -O curl-${CURL_VERSION}.tar.gz && \
@@ -107,6 +108,23 @@ RUN   \
     cd CMake-4.3.3 && \
     OPENSSL_ROOT_DIR="/app" ./bootstrap && make -j$(nproc) && make install && \
     cd / && rm -rf /tmp/sources/CMake-4.3.3*
+
+# ==================== LIBXML2 ====================
+RUN cd /tmp/sources && \    
+    tar -xJf libxml2-${LIBXML2_VERSION}.tar.xz && \
+    cd libxml2-${LIBXML2_VERSION} && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=ON \
+          -DLIBXML2_WITH_PYTHON=OFF \
+          -DLIBXML2_WITH_LZMA=OFF \
+          -DLIBXML2_WITH_ICU=OFF \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    # Очистка после сборки (опционально, для экономии места)
+    cd / && rm -rf /tmp/sources/libxml2-${LIBXML2_VERSION}*
 
 # ==================== JSON ====================
 RUN   \
@@ -232,49 +250,50 @@ RUN   \
     make install && \
    cd / && rm -rf /tmp/sources/postgis-${GIDB}*
 
-# ./configure --prefix=/app --with-geosconfig=/app/bin/geos-config --with-projdir=/app
 # ==================== RUNTIME ====================
-# FROM debian:trixie-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
-# ENV PATH="/app/bin:${PATH}"
-# ENV MANPATH="/app/share/man:${MANPATH}"
-# ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"
-# ENV LD_LIBRARY_PATH="/app/lib:/app/lib64:${LD_LIBRARY_PATH}"
+COPY --from=builder /app /app
 
-# RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
-#     echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
-#     ldconfig
+RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
+    echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
+    echo "/app/lib/x86_64-linux-gnu" >> /etc/ld.so.conf.d/app.conf && \
+    ldconfig
 
-# ENV PG_VERSION=${PG_VERSION:-18.4}
-# ENV PGDATA /var/lib/postgresql/${PG_VERSION}/data
-# ENV PG_PASSWORD=${PG_PASSWORD:-1Qwerty2}
-# ENV PG_MAX_CONNECTIONS="${PG_MAX_CONNECTIONS:-100}"
-# ENV PG_SHARED_BUFFERS="${PG_SHARED_BUFFERS:-}"
-# ENV PG_EFFECTIVE_CACHE_SIZE="${PG_EFFECTIVE_CACHE_SIZE:-}"
-# ENV PG_WORK_MEM="${PG_WORK_MEM:-}"
-# ENV PG_MAINTENANCE_WORK_MEM="${PG_MAINTENANCE_WORK_MEM:-}"
+RUN echo '#!/bin/bash' > /etc/profile.d/app-paths.sh && \
+    echo 'export PATH="/app/bin:${PATH}"' >> /etc/profile.d/app-paths.sh && \
+    echo 'export MANPATH="/app/share/man:${MANPATH}"' >> /etc/profile.d/app-paths.sh && \
+    echo 'export PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"' >> /etc/profile.d/app-paths.sh && \
+    chmod +x /etc/profile.d/app-paths.sh
 
-# COPY --from=builder /app /app
+ENV PATH="/app/bin:${PATH}"
+ENV MANPATH="/app/share/man:${MANPATH}"
+ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"
+ENV LD_LIBRARY_PATH="/app/lib:/app/lib/x86_64-linux-gnu:/app/lib64:${LD_LIBRARY_PATH}"
 
-# RUN echo "/app/lib/x86_64-linux-gnu" > /etc/ld.so.conf.d/app-lib.conf && \
-#     echo "/app/lib" >> /etc/ld.so.conf.d/app-lib.conf && \
-#     ldconfig
+ENV PG_VERSION=${PG_VERSION:-18.4}
+ENV PGDATA /var/lib/postgresql/${PG_VERSION}/data
+ENV PG_PASSWORD=${PG_PASSWORD:-1Qwerty2}
+ENV PG_MAX_CONNECTIONS="${PG_MAX_CONNECTIONS:-100}"
+ENV PG_SHARED_BUFFERS="${PG_SHARED_BUFFERS:-}"
+ENV PG_EFFECTIVE_CACHE_SIZE="${PG_EFFECTIVE_CACHE_SIZE:-}"
+ENV PG_WORK_MEM="${PG_WORK_MEM:-}"
+ENV PG_MAINTENANCE_WORK_MEM="${PG_MAINTENANCE_WORK_MEM:-}"
 
-# RUN set -eux; \
-#     groupadd -r postgres --gid=999; \
-#     useradd -r -g postgres --uid=999 --home-dir=/var/lib/postgresql --shell=/bin/bash postgres; \
-#     install --verbose --directory --owner postgres --group postgres --mode 1777 /var/lib/postgresql
+RUN set -eux; \
+    groupadd -r postgres --gid=999; \
+    useradd -r -g postgres --uid=999 --home-dir=/var/lib/postgresql --shell=/bin/bash postgres; \
+    install --verbose --directory --owner postgres --group postgres --mode 1777 /var/lib/postgresql
 
-# COPY docker-entrypoint.sh docker-cmd.sh /app/bin/
-# RUN chmod +x /app/bin/docker-entrypoint.sh && \
-#     chmod +x /app/bin/docker-cmd.sh
+COPY docker-entrypoint.sh docker-cmd.sh /app/bin/
+RUN chmod +x /app/bin/docker-entrypoint.sh && \
+    chmod +x /app/bin/docker-cmd.sh
 
-# WORKDIR /app
+WORKDIR /app
 
-# VOLUME /var/lib/postgresql
-# EXPOSE 5432
-# STOPSIGNAL SIGINT
-# # ENTRYPOINT ["/app/bin/docker-entrypoint.sh"]
-# # CMD ["/app/bin/docker-cmd.sh"]
+VOLUME /var/lib/postgresql
+EXPOSE 5432
+STOPSIGNAL SIGINT
+ENTRYPOINT ["/app/bin/docker-entrypoint.sh"]
 
-CMD ["/bin/bash"]
+CMD ["/app/bin/docker-cmd.sh"]
