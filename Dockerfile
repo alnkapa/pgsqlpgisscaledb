@@ -17,8 +17,8 @@ ARG TIMESCALEDB_VERSION=2.28.2
 # Пути
 ENV PATH="/app/bin:${PATH}"
 ENV MANPATH="/app/share/man:${MANPATH}"
-ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"
-ENV LD_LIBRARY_PATH="/app/lib:/app/lib64:${LD_LIBRARY_PATH}"
+ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:/app/lib64/pkgconfig:${PKG_CONFIG_PATH}"
+ENV LD_LIBRARY_PATH="/app/lib:/app/lib/x86_64-linux-gnu:/app/lib64:${LD_LIBRARY_PATH}"
 
 RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
     echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
@@ -185,7 +185,13 @@ RUN   \
 	cd /tmp/sources && \
     tar -xzf postgresql-${PG_VERSION}.tar.gz && \
     cd postgresql-${PG_VERSION} && \
-    meson setup build --buildtype=release --prefix=/app && \
+    meson setup build \
+    --buildtype=release \
+    --prefix=/app \
+    -Dssl=openssl \
+    -Dlibcurl=enabled \
+    -Dlibxml=enabled \    
+    && \
     cd build && ninja -j$(nproc) && ninja install && \
     cd / && rm -rf /tmp/sources/postgresql-${PG_VERSION}*
 
@@ -254,16 +260,14 @@ RUN   \
 
 # ==================== TIMESCALEDB ====================
 RUN \
-    cd /tmp/sources && \    
+    cd /tmp/sources && \
+    tar -xzf timescaledb-${TIMESCALEDB_VERSION}.tar.gz && \
     cd timescaledb-${TIMESCALEDB_VERSION} && \
-    ./bootstrap -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-                -DCMAKE_BUILD_TYPE=Release \
+    ./bootstrap -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/app \
-                --install-prefix=/app \
                 -DREGRESS_CHECKS=OFF \
                 -DTAP_CHECKS=OFF \
                 -DWARNINGS_AS_ERRORS=OFF \
-                -DPROJECT_INSTALL_METHOD="docker" \
                 -DSEND_TELEMETRY_DEFAULT=OFF && \
     cd build && \
     make -j$(nproc) && \
@@ -283,7 +287,7 @@ RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
 RUN echo '#!/bin/bash' > /etc/profile.d/app-paths.sh && \
     echo 'export PATH="/app/bin:${PATH}"' >> /etc/profile.d/app-paths.sh && \
     echo 'export MANPATH="/app/share/man:${MANPATH}"' >> /etc/profile.d/app-paths.sh && \
-    echo 'export PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"' >> /etc/profile.d/app-paths.sh && \
+    echo 'export PKG_CONFIG_PATH="/app/lib/pkgconfig:/app/lib64/pkgconfig:${PKG_CONFIG_PATH}"' >> /etc/profile.d/app-paths.sh && \
     chmod +x /etc/profile.d/app-paths.sh
 
 ENV PATH="/app/bin:${PATH}"
