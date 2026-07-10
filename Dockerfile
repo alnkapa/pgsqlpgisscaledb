@@ -263,7 +263,7 @@ RUN \
     cd /tmp/sources && \
     tar -xzf timescaledb-${TIMESCALEDB_VERSION}.tar.gz && \
     cd timescaledb-${TIMESCALEDB_VERSION} && \
-    ./bootstrap -DCMAKE_BUILD_TYPE=Release \
+    CFLAGS="-I/app/include ${CFLAGS}" ./bootstrap -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/app \
                 -DREGRESS_CHECKS=OFF \
                 -DTAP_CHECKS=OFF \
