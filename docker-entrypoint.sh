@@ -111,7 +111,7 @@ maintenance_work_mem = ${PG_MAINTENANCE_WORK_MEM}MB
 listen_addresses = '*'
 port = 5432
 ssl = off
-shared_preload_libraries = 'timescaledb'
+shared_preload_libraries = '/app/lib/x86_64-linux-gnu/postgresql/timescaledb.so'
 EOF
 
 }
