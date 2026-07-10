@@ -9,11 +9,25 @@ ARG PROJ=${PROJ:-9.8.1}
 ARG JSON=${JSON:-3.12.0}
 ARG CURL_VERSION=${CURL_VERSION:-8.21.0}
 ARG OPENSSL_VERSION=${OPENSSL_VERSION:-4.0.1}
+ARG PROTO_BUF=${PROTO_BUF:-30.2}
+ARG PROTO_C=${PROTO_C:-1.5.2}
 
-RUN set -ex; \
+# Пути
+ENV PATH="/app/bin:${PATH}"
+ENV MANPATH="/app/share/man:${MANPATH}"
+ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"
+ENV LD_LIBRARY_PATH="/app/lib:/app/lib64:${LD_LIBRARY_PATH}"
+
+RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
+    echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
+    echo "/app/lib/x86_64-linux-gnu" >> /etc/ld.so.conf.d/app.conf && \
+    ldconfig
+
+# Базовые зависимости //		cmake \
+RUN  \
+	set -ex; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
-		cmake \
 		meson \
 		wget \
 		ca-certificates \
@@ -29,164 +43,238 @@ RUN set -ex; \
 		gzip \
 		pkg-config \
 		ninja-build \
+		autoconf \
+		automake \
+		libtool \
+		libxml2-dev \
+		libtiff-dev \
 	; \
 	rm -rf /var/lib/apt/lists/*
 
-		# libreadline-dev \
-		# gettext \
-		# zlib1g-dev \
-		# libicu-dev \
-		# liblz4-dev \
-		# libzstd-dev \
-		# libtiff-dev \
-		# tcl-dev \
-		# libxml2-dev \		
-		# libproj-dev \
-		# libgdal-dev \
-		# libsfcgal-dev \
-		# protobuf-c-compiler \
-		# libprotobuf-c-dev \
-		# libgdal-dev \
-		# libjson-c-dev \
-		# git2cl \
-		# xsltproc \
-		# docbook-xsl \
-		# imagemagick \
-		# dblatex \
+# ==================== DOWNLOAD ALL SOURCES ====================
+# Скачиваем все исходники в одном слое для лучшего кеширования
+RUN   \    
+    set -ex; \
+    mkdir -p /tmp/sources && cd /tmp/sources && \
+    wget -r --tries=10 https://github.com/Kitware/CMake/archive/refs/tags/v4.3.3.tar.gz -O CMake-4.3.3.tar.gz && \
+    wget -r --tries=10 https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz -O openssl-${OPENSSL_VERSION}.tar.gz && \
+    wget -r --tries=10 https://curl.se/download/curl-${CURL_VERSION}.tar.gz -O curl-${CURL_VERSION}.tar.gz && \
+    wget -r --tries=10 https://github.com/nlohmann/json/archive/refs/tags/v${JSON}.tar.gz -O json-${JSON}.tar.gz && \
+    wget -r --tries=10 https://a1.sqlite.org/2026/sqlite-autoconf-3530300.tar.gz -O sqlite-autoconf-3530300.tar.gz && \
+    wget -r --tries=10 https://github.com/libgeos/geos/releases/download/${GEOS}/geos-${GEOS}.tar.bz2 -O geos-${GEOS}.tar.bz2 && \
+    wget -r --tries=10 https://download.osgeo.org/proj/proj-${PROJ}.tar.gz -O proj-${PROJ}.tar.gz && \
+    wget -r --tries=10 https://ftp.postgresql.org/pub/source/v${PG_VERSION}/postgresql-${PG_VERSION}.tar.gz -O postgresql-${PG_VERSION}.tar.gz && \
+    wget -r --tries=10 https://github.com/OSGeo/gdal/archive/refs/tags/v3.13.1.tar.gz -O gdal-3.13.1.tar.gz && \
+    wget -r --tries=10 https://github.com/abseil/abseil-cpp/archive/refs/tags/20260526.0.tar.gz -O abseil-cpp-20260526.0.tar.gz && \
+    wget -r --tries=10 https://github.com/protocolbuffers/protobuf/archive/refs/tags/v${PROTO_BUF}.tar.gz -O protobuf-${PROTO_BUF}.tar.gz && \
+    wget -r --tries=10 https://github.com/protobuf-c/protobuf-c/archive/refs/tags/v${PROTO_C}.tar.gz -O protobuf-c-${PROTO_C}.tar.gz && \
+    wget -r --tries=10 https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz -O postgis-${GIDB}.tar.gz && \
+    echo "All sources downloaded"
 
-WORKDIR /app
-ARG PATH=/app/bin:$PATH
-ARG MANPATH=/app/share/man:$MANPATH
-ARG LD_LIBRARY_PATH
-
-RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
-    echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
-    ldconfig
-# \ -Dssl=enabled \
-#   -Dnls=disabled \
-#   -Dicu=disabled \
-#   -Dzlib=enabled \
-#   -Dlz4=enabled \
-#   -Dzstd=enabled \
-#   -Dgssapi=disabled \
-#   -Dldap=disabled \
-#   -Dlibcurl=disabled \
-#   -Dreadline=enabled \
-#   -Dplperl=disabled \
-#   -Dplpython=disabled \
-#   -Dpltcl=disabled
-
-
-# # Скачивание, сборка и установка OpenSSL no-shared \
-
-
-RUN wget https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz && \
-    tar -xzvf openssl-${OPENSSL_VERSION}.tar.gz && \
+# ==================== OPENSSL ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf openssl-${OPENSSL_VERSION}.tar.gz && \
     cd openssl-${OPENSSL_VERSION} && \
     ./Configure --prefix=/app \
-                --openssldir=/appl \
+                --release \
+                --openssldir=/app \
                 no-tests \
                 '-Wl,--enable-new-dtags,-rpath,$(LIBRPATH)' && \
-    make -j $(nproc) && \
+    make -j$(nproc) && \
     make install_sw && \
-    cd .. && \
-    rm -rf openssl-${OPENSSL_VERSION} openssl-${OPENSSL_VERSION}.tar.gz	
+    cd / && rm -rf /tmp/sources/openssl-${OPENSSL_VERSION}*
 
-ENV LD_LIBRARY_PATH=/app/lib64:/app/lib:${LD_LIBRARY_PATH}
-
-
-# # Скачиваем и собираем CURL с помощью wget --disable-shared \
-RUN wget https://curl.se/download/curl-${CURL_VERSION}.tar.gz && \
-    tar -xzvf curl-${CURL_VERSION}.tar.gz && \
+# ==================== CURL ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf curl-${CURL_VERSION}.tar.gz && \
     cd curl-${CURL_VERSION} && \
-    ./configure --prefix=/app \                
-				--with-openssl=/app \
+    ./configure --prefix=/app \
+                --with-openssl=/app \
                 --enable-static \
                 --without-libpsl \
                 --without-brotli \
                 --without-zstd && \
-    make -j8 && \
+    make -j$(nproc) && \
     make install && \
-    cd .. && \
-    rm -rf curl-${CURL_VERSION} curl-${CURL_VERSION}.tar.gz
+    cd / && rm -rf /tmp/sources/curl-${CURL_VERSION}*
 
+# ==================== CMAKE ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf CMake-4.3.3.tar.gz && \
+    cd CMake-4.3.3 && \
+    OPENSSL_ROOT_DIR="/app" ./bootstrap && make -j$(nproc) && make install && \
+    cd / && rm -rf /tmp/sources/CMake-4.3.3*
 
-RUN curl -L https://github.com/nlohmann/json/archive/refs/tags/v${JSON}.tar.gz | tar -xzv
-RUN cd  json-${JSON}/ && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/app -DJSON_BuildTests=OFF -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install
-RUN rm -rf  json-${JSON}
+# ==================== JSON ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf json-${JSON}.tar.gz && \
+    cd json-${JSON} && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -DJSON_BuildTests=OFF \
+          -DCMAKE_BUILD_TYPE=Release .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/json-${JSON}*
 
+# ==================== SQLITE3 ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf sqlite-autoconf-3530300.tar.gz && \
+    cd sqlite-autoconf-3530300 && \
+    ./configure --prefix=/app --enable-static --enable-rtree && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/sqlite-autoconf-3530300*
 
-RUN curl -L https://a1.sqlite.org/2026/sqlite-autoconf-3530300.tar.gz | tar -xzv
-RUN cd sqlite-autoconf-3530300 && \
-    ./configure --prefix=/app --disable-shared --enable-static && \
-    make -j8 && \
-    make install
-RUN rm -rf sqlite-autoconf-3530300
+# ==================== GEOS ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xjf geos-${GEOS}.tar.bz2 && \
+    cd geos-${GEOS} && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_TESTING=OFF .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/geos-${GEOS}*
 
-RUN curl -L https://github.com/libgeos/geos/releases/download/${GEOS}/geos-${GEOS}.tar.bz2 | tar -xjv
-RUN cd geos-${GEOS}/ && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/app -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install
-RUN rm -rf geos-${GEOS}
+# ==================== PROJ ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf proj-${PROJ}.tar.gz && \
+    cd proj-${PROJ} && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -DENABLE_TIFF=ON \
+          -DENABLE_CURL=ON \
+          -DBUILD_TESTING=OFF \
+          -DBUILD_SHARED_LIBS=ON \
+          -DCMAKE_BUILD_TYPE=Release .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/proj-${PROJ}*
 
-RUN set -ex; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
-		libtiff-dev \		
-	; \
-	rm -rf /var/lib/apt/lists/*
+# ==================== POSTGRESQL ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf postgresql-${PG_VERSION}.tar.gz && \
+    cd postgresql-${PG_VERSION} && \
+    meson setup build --buildtype=release --prefix=/app && \
+    cd build && ninja -j$(nproc) && ninja install && \
+    cd / && rm -rf /tmp/sources/postgresql-${PG_VERSION}*
 
-RUN curl -L https://download.osgeo.org/proj/proj-${PROJ}.tar.gz | tar -xzv
-RUN cd proj-${PROJ}/ && mkdir build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/app -DENABLE_TIFF=OFF -DENABLE_CURL=ON -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install
-RUN rm -rf proj-${PROJ}
-# RUN projsync --system-directory --all
+# ==================== GDAL ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf gdal-3.13.1.tar.gz && \
+    cd gdal-3.13.1 && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -DBUILD_TESTING=OFF \
+          -DBUILD_SHARED_LIBS=ON \
+          -DCMAKE_BUILD_TYPE=Release .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/gdal-3.13.1*
 
+# ==================== ABSEIL ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf abseil-cpp-20260526.0.tar.gz && \
+    cd abseil-cpp-20260526.0 && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -DABSL_BUILD_TESTING=OFF \
+          -DCMAKE_BUILD_TYPE=Release .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/abseil-cpp-20260526.0*
 
+# ==================== PROTOBUF ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf protobuf-${PROTO_BUF}.tar.gz && \
+    cd protobuf-${PROTO_BUF} && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/app \
+          -Dprotobuf_BUILD_TESTS=OFF \
+          -DCMAKE_BUILD_TYPE=Release .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/protobuf-${PROTO_BUF}*
 
+# ==================== PROTOBUF-C ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf protobuf-c-${PROTO_C}.tar.gz && \
+    cd protobuf-c-${PROTO_C} && \
+    ./autogen.sh && \
+    ./configure --prefix=/app && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/protobuf-c-${PROTO_C}*
 
+# ==================== POSTGIS ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf postgis-${GIDB}.tar.gz && \
+    cd postgis-${GIDB} && \
+    ./configure --prefix=/app \
+                --with-geosconfig=/app/bin/geos-config \
+                --with-projdir=/app && \
+    make -j$(nproc) && \
+    make install && \
+   cd / && rm -rf /tmp/sources/postgis-${GIDB}*
 
+# ./configure --prefix=/app --with-geosconfig=/app/bin/geos-config --with-projdir=/app
+# ==================== RUNTIME ====================
+# FROM debian:trixie-slim AS runtime
 
-# # find / -name "geos"
+# ENV PATH="/app/bin:${PATH}"
+# ENV MANPATH="/app/share/man:${MANPATH}"
+# ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:${PKG_CONFIG_PATH}"
+# ENV LD_LIBRARY_PATH="/app/lib:/app/lib64:${LD_LIBRARY_PATH}"
 
-# RUN curl -L https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz | tar -xzv
-# RUN cd postgis-${GIDB}/ && ./configure --prefix=/app --enable-static  --with-geosconfig=/app/bin/geos-config --with-geosconfig=/app/bin/geos-config && make -j8 && make install
-# RUN rm -rf postgis-${GIDB}
+# RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
+#     echo "/app/lib64" >> /etc/ld.so.conf.d/app.conf && \
+#     ldconfig
 
+# ENV PG_VERSION=${PG_VERSION:-18.4}
+# ENV PGDATA /var/lib/postgresql/${PG_VERSION}/data
+# ENV PG_PASSWORD=${PG_PASSWORD:-1Qwerty2}
+# ENV PG_MAX_CONNECTIONS="${PG_MAX_CONNECTIONS:-100}"
+# ENV PG_SHARED_BUFFERS="${PG_SHARED_BUFFERS:-}"
+# ENV PG_EFFECTIVE_CACHE_SIZE="${PG_EFFECTIVE_CACHE_SIZE:-}"
+# ENV PG_WORK_MEM="${PG_WORK_MEM:-}"
+# ENV PG_MAINTENANCE_WORK_MEM="${PG_MAINTENANCE_WORK_MEM:-}"
 
+# COPY --from=builder /app /app
 
-# -------- runtime --------
-FROM debian:trixie-slim AS runtime
+# RUN echo "/app/lib/x86_64-linux-gnu" > /etc/ld.so.conf.d/app-lib.conf && \
+#     echo "/app/lib" >> /etc/ld.so.conf.d/app-lib.conf && \
+#     ldconfig
 
-ENV PATH=/app/bin:$PATH
-ENV PG_VERSION=${PG_VERSION:-18.4}
-ENV PGDATA /var/lib/postgresql/${PG_VERSION}/data
-ENV PG_PASSWORD=${PG_PASSWORD:-1Qwerty2}
-ENV PG_MAX_CONNECTIONS="${PG_MAX_CONNECTIONS:-100}"
-ENV PG_SHARED_BUFFERS="${PG_SHARED_BUFFERS:-}"
-ENV PG_EFFECTIVE_CACHE_SIZE="${PG_EFFECTIVE_CACHE_SIZE:-}"
-ENV PG_WORK_MEM="${PG_WORK_MEM:-}"
-ENV PG_MAINTENANCE_WORK_MEM="${PG_MAINTENANCE_WORK_MEM:-}"
+# RUN set -eux; \
+#     groupadd -r postgres --gid=999; \
+#     useradd -r -g postgres --uid=999 --home-dir=/var/lib/postgresql --shell=/bin/bash postgres; \
+#     install --verbose --directory --owner postgres --group postgres --mode 1777 /var/lib/postgresql
 
-COPY --from=builder /app /app
+# COPY docker-entrypoint.sh docker-cmd.sh /app/bin/
+# RUN chmod +x /app/bin/docker-entrypoint.sh && \
+#     chmod +x /app/bin/docker-cmd.sh
 
-RUN echo "/app/lib/x86_64-linux-gnu" > /etc/ld.so.conf.d/app-lib.conf \
- && echo "/app/lib" > /etc/ld.so.conf.d/app-lib-root.conf \
- && ldconfig
+# WORKDIR /app
 
-RUN set -eux; groupadd -r postgres --gid=999; \
-	useradd -r -g postgres --uid=999 --home-dir=/var/lib/postgresql --shell=/bin/bash postgres; \
-	install --verbose --directory --owner postgres --group postgres --mode 1777 /var/lib/postgresql
-
-COPY docker-entrypoint.sh docker-cmd.sh /app/bin/
-RUN  chmod +x /app/bin/docker-entrypoint.sh
-RUN  chmod +x /app/bin/docker-cmd.sh
-VOLUME /var/lib/postgresql
-EXPOSE 5432
-STOPSIGNAL SIGINT
-# ENTRYPOINT ["/app/bin/docker-entrypoint.sh"]
-# CMD ["/app/bin/docker-cmd.sh"]
+# VOLUME /var/lib/postgresql
+# EXPOSE 5432
+# STOPSIGNAL SIGINT
+# # ENTRYPOINT ["/app/bin/docker-entrypoint.sh"]
+# # CMD ["/app/bin/docker-cmd.sh"]
 
 CMD ["/bin/bash"]
-
-# docker build -t my  .
-# docker run -d --name my my
-
-
