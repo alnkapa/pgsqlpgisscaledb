@@ -13,6 +13,7 @@ ARG PROTO_BUF=${PROTO_BUF:-30.2}
 ARG PROTO_C=${PROTO_C:-1.5.2}
 ARG LIBXML2_VERSION=${LIBXML2_VERSION:-2.15.3}
 ARG TIMESCALEDB_VERSION=2.28.2
+ARG LIBTIFF_VERSION=4.7.2
 
 # Пути
 ENV PATH="/app/bin:${PATH}"
@@ -48,7 +49,6 @@ RUN  \
 		autoconf \
 		automake \
 		libtool \
-		libtiff-dev \
 	; \
 	rm -rf /var/lib/apt/lists/*
 
@@ -72,7 +72,22 @@ RUN   \
     wget -r --tries=10 https://github.com/protobuf-c/protobuf-c/archive/refs/tags/v${PROTO_C}.tar.gz -O protobuf-c-${PROTO_C}.tar.gz && \
     wget -r --tries=10 https://download.osgeo.org/postgis/source/postgis-${GIDB}.tar.gz -O postgis-${GIDB}.tar.gz && \
     wget -r --tries=10 https://github.com/timescale/timescaledb/archive/refs/tags/${TIMESCALEDB_VERSION}.tar.gz -O timescaledb-${TIMESCALEDB_VERSION}.tar.gz && \
+    wget -r --tries=10 https://download.osgeo.org/libtiff/tiff-${LIBTIFF_VERSION}.tar.gz -O tiff-${LIBTIFF_VERSION}.tar.gz && \
+    wget -r --tries=10 https://www.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-2.42.tar.gz -O util-linux-2.42.tar.gz && \
     echo "All sources downloaded"
+
+# ==================== LIBTIFF ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf  tiff-${LIBTIFF_VERSION}.tar.gz && \
+    cd  tiff-${LIBTIFF_VERSION} && \
+    ./configure --prefix=/app \
+                --disable-tests \
+                --disable-docs \
+                && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/tiff-${LIBTIFF_VERSION}*
 
 # ==================== OPENSSL ====================
 RUN   \
@@ -180,6 +195,21 @@ RUN   \
     make install && \
     cd / && rm -rf /tmp/sources/proj-${PROJ}*
 
+# ==================== UTIL-LINUX ====================
+RUN   \
+	cd /tmp/sources && \
+    tar -xzf  util-linux-2.42.tar.gz && \
+    cd  util-linux-2.42 && \
+    ./configure --prefix=/app \
+            --disable-all-programs \
+            --disable-poman \
+            --disable-asciidoc \
+            --enable-libuuid \
+            && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && rm -rf /tmp/sources/util-linux-2.42*
+
 # ==================== POSTGRESQL ====================
 RUN   \
 	cd /tmp/sources && \
@@ -190,7 +220,10 @@ RUN   \
     --prefix=/app \
     -Dssl=openssl \
     -Dlibcurl=enabled \
-    -Dlibxml=enabled \    
+    -Dlibxml=enabled \
+    -Duuid=e2fs \
+    -Dextra_include_dirs=/app/include \
+    -Dextra_lib_dirs=/app/lib \
     && \
     cd build && ninja -j$(nproc) && ninja install && \
     cd / && rm -rf /tmp/sources/postgresql-${PG_VERSION}*
