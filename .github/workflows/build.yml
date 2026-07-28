@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions: write-all
+    if: ${{ secrets.MY_DOCKER_TOKEN != '' }}
     env:
-      MY_DOCKER_TOKEN: ${{ secrets.MY_DOCKER_TOKEN }}
-    if: ${{ env.MY_DOCKER_TOKEN != '' }}
+      MY_DOCKER_TOKEN: ${{ secrets.MY_DOCKER_TOKEN }}    
     steps:
       - name: Checkout
         uses: actions/checkout@v6
