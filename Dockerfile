@@ -12,10 +12,10 @@ ARG OPENSSL_VERSION=${OPENSSL_VERSION:-4.0.1}
 ARG PROTO_BUF=${PROTO_BUF:-30.2}
 ARG PROTO_C=${PROTO_C:-1.5.2}
 ARG LIBXML2_VERSION=${LIBXML2_VERSION:-2.15.3}
-ARG TIMESCALEDB_VERSION=2.28.2
-ARG LIBTIFF_VERSION=4.7.2
+ARG TIMESCALEDB_VERSION=${TIMESCALEDB_VERSION:-2.28.2}
+ARG LIBTIFF_VERSION=${LIBTIFF_VERSION:-4.7.2}
 
-# Пути
+
 ENV PATH="/app/bin:${PATH}"
 ENV MANPATH="/app/share/man:${MANPATH}"
 ENV PKG_CONFIG_PATH="/app/lib/pkgconfig:/app/lib64/pkgconfig:${PKG_CONFIG_PATH}"
@@ -26,7 +26,6 @@ RUN echo "/app/lib" > /etc/ld.so.conf.d/app.conf && \
     echo "/app/lib/x86_64-linux-gnu" >> /etc/ld.so.conf.d/app.conf && \
     ldconfig
 
-# Базовые зависимости //		cmake \ 		libxml2-dev \
 RUN  \
 	set -ex; \
 	apt-get update; \
@@ -53,7 +52,6 @@ RUN  \
 	rm -rf /var/lib/apt/lists/*
 
 # ==================== DOWNLOAD ALL SOURCES ====================
-# Скачиваем все исходники в одном слое для лучшего кеширования
 RUN   \    
     set -ex; \
     mkdir -p /tmp/sources && cd /tmp/sources && \
@@ -140,7 +138,6 @@ RUN cd /tmp/sources && \
           .. && \
     make -j$(nproc) && \
     make install && \
-    # Очистка после сборки (опционально, для экономии места)
     cd / && rm -rf /tmp/sources/libxml2-${LIBXML2_VERSION}*
 
 # ==================== JSON ====================

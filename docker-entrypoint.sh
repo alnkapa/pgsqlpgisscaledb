@@ -9,10 +9,8 @@ PG_PASSWORD=${PG_PASSWORD:-1Qwerty2}
 
 create_web_user() {
     if [ ! -f "$PGDATA/$FIRST_RUN_FILE" ]; then
-        # Запуск PostgreSQL в фоне для инициализации
         exec su - postgres -c "/app/bin/postgres -D $PGDATA" &
         local pg_pid=$!            
-        # Ожидание готовности сервера
         local RETRY_COUNT=0
         local RETRY_MAX=10
         local RETRY_INTERVAL=3
@@ -25,18 +23,15 @@ create_web_user() {
             echo "Waiting for PostgreSQL to be ready... Attempt: $RETRY_COUNT"
             sleep "$RETRY_INTERVAL"
         done
-        # Создание пользователя 'web' с паролем
         /app/bin/psql -U postgres -d template1 <<EOSQL
 CREATE USER web WITH PASSWORD 'web';
 ALTER USER web WITH SUPERUSER;
 EOSQL
     
-        # Завершение фонового процесса
         kill $pg_pid 2>/dev/null || true
         wait $pg_pid 2>/dev/null || true
-        # Отметка о завершении первого запуска
         touch "$PGDATA/$FIRST_RUN_FILE"    
-        echo "✅ Пользователь 'web' создан"
+        echo "✅ User 'web' create"
     fi    
 }
 
@@ -46,9 +41,6 @@ setup_pg_hba_conf() {
 local   all             all                                     trust
 host    all             all             0.0.0.0/0               scram-sha-256
 EOSQL
-    # Проверяем, существует ли уже такая строка
-    # if ! grep -q "0.0.0.0/0.*scram-sha-256" "$pg_hba_file" 2>/dev/null; then
-    # echo "$hba_entry" >> "$pg_hba_file"
     chmod 600 "$PGDATA/pg_hba.conf"
 }
 
@@ -118,8 +110,6 @@ EOF
 
 add_include_to_postgresql_conf() {
     local postgresql_conf="$PGDATA/postgresql.conf"
-    
-    # Проверить наличие include директивы
     if ! grep -q "^include = '$config_file'" "$postgresql_conf"; then
         echo "" >> "$postgresql_conf"
         echo "# Include auto-generated configuration" >> "$postgresql_conf"
@@ -140,15 +130,5 @@ docker_setup_env
 calculate_postgresql_params
 add_include_to_postgresql_conf
 create_web_user
-
-# su - postgres -c "
-#   /app/bin/postgres -D $PGDATA &
-#   PG_PID=\$!
-#   sleep 3
-#   create_web_user
-#   wait \$PG_PID
-# " &
-
-# exec su - postgres -c "/app/bin/postgres -D $PGDATA"
 
 exec "$@"
