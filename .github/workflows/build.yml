@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  pull_request:
 
 jobs:
   build:
@@ -13,8 +14,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       tag_name: ${{ github.run_number }}
       release_name: Release ${{ github.run_number }}
-    steps:    
-      - name: Checkout      
+    steps:
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           submodules: true
@@ -22,4 +23,15 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ vars.DOCKER_USERNAME }}/pgsqlpgisscaledb
+          images: ${{ vars.MY_DOCKER_USERNAME }}/pgsqlpgisscaledb
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.MY_DOCKER_USERNAME }}
+          password: ${{ secrets.MY_DOCKER_PASSWORD }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
