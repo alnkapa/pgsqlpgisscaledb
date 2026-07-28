@@ -11,10 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MY_DOCKER_TOKEN: ${{ secrets.MY_DOCKER_TOKEN }}
-      tag_name: ${{ github.run_number }}
-      release_name: Release ${{ github.run_number }}
+    if: ${{ env.MY_DOCKER_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,7 +26,7 @@ jobs:
           images: ${{ vars.MY_DOCKER_USERNAME }}/pgsqlpgisscaledb
       
       - name: Login to Docker Hub
-        if: ${{ vars.MY_DOCKER_REGISTRY != '' && env.MY_DOCKER_TOKEN != '' }}
+        if: ${{ vars.MY_DOCKER_REGISTRY != ''}}
         uses: docker/login-action@v4
         with:
           registry: ${{ vars.MY_DOCKER_REGISTRY }}
@@ -36,7 +34,7 @@ jobs:
           password: ${{ env.MY_DOCKER_TOKEN }}
       
       - name: Login to Docker Hub
-        if: ${{ vars.MY_DOCKER_REGISTRY == '' && env.MY_DOCKER_TOKEN != '' }}
+        if: ${{ vars.MY_DOCKER_REGISTRY == ''}}
         uses: docker/login-action@v4
         with:
           username: ${{ vars.MY_DOCKER_USERNAME }}
